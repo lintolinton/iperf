@@ -2,12 +2,16 @@ import os
 import re
 import sys
 import time
+import queue
+import pexpect
 import subprocess
+import threading
 from influxdb import InfluxDBClient
 
 SPEEDTEST_HOST = 'google.com' if not os.environ.get('SPEEDTEST_HOST') else os.environ.get('SPEEDTEST_HOST')
 SPEEDTEST_SERVER = 'google.com' if not os.environ.get('SPEEDTEST_SERVER') else os.environ.get('SPEEDTEST_SERVER')
-INFLUXDB_DB = 'influxdb' if not os.environ.get('INFLUXDB_DB') else os.environ.get('INFLUXDB_DB')
+INFLUXDB_DB = 'speedtest' if not os.environ.get('INFLUXDB_DB') else os.environ.get('INFLUXDB_DB')
+INFLUXDB_HOST = 'influxdb' if not os.environ.get('INFLUXDB_HOST') else os.environ.get('INFLUXDB_HOST')
 INFLUXDB_DB_PORT = 8086 if not os.environ.get('INFLUXDB_DB_PORT') else os.environ.get('INFLUXDB_DB_PORT')
 INFLUXDB_USERNAME = 'root' if not os.environ.get('INFLUXDB_USERNAME') else os.environ.get('INFLUXDB_USERNAME')
 INFLUXDB_PASSWORD = 'root' if not os.environ.get('INFLUXDB_PASSWORD') else os.environ.get('INFLUXDB_PASSWORD')
@@ -17,20 +21,23 @@ SPEEDTEST_HOST_IPERF = 'google.com' if not os.environ.get('SPEEDTEST_HOST_IPERF'
 iperf_stdout_output = 'iperf_stdout.txt'
 ping_stdout_output = 'ping_stdout.txt'
 IPERF_INTERVAL = 10 if not os.environ.get('IPERF_INTERVAL') else os.environ.get('IPERF_INTERVAL')
+IPERF_SERVER_INTERVAL = 10 if not os.environ.get('IPERF_SERVER_INTERVAL') else os.environ.get('IPERF_SERVER_INTERVAL')
 
-#[{'measurement': 'upload', 'tags': {'host': 'google.com'}, 'fields': {'value': 0.0}}, {'measurement': 'download', 'tags': {'host': 'google.com'}, 'fields':  {'value': 0.0}}, {'measurement': 'ping', 'tags': {'host': 'google.com'}, 'fields':  {'value': 0.0}}]
+# queues for thread sync
+s_q = queue.Queue()
+r_q = queue.Queue()
 
 def push_to_influx(data):
     print("Connecting to db")
-    client = InfluxDBClient(host=INFLUXDB_DB, 
+    client = InfluxDBClient(host=INFLUXDB_HOST, 
     username=INFLUXDB_USERNAME,
     password=INFLUXDB_PASSWORD,
     port=INFLUXDB_DB_PORT)
     data_p = []
     for k, v in data.items():
-        data_p.append({'measurement': k, 'tags': {'host': SPEEDTEST_HOST_IPERF}, 'value': v})
+        data_p.append({'measurement': k, 'tags': {'host': SPEEDTEST_HOST_IPERF}, 'fields': {'value': v}})
     print(data_p)
-    client.switch_database('speedtest')
+    client.switch_database(INFLUXDB_DB)
     client.write_points(data_p)
 
 def process_iperf_data():
@@ -56,7 +63,7 @@ def process_iperf_data():
     print(vals)
     if vals:
        
-        speed = sum(vals[-1])
+        speed = vals[-1]
         if 'GB' in speed:
             speed = float(speed.split()[0]) * 1024 / IPERF_INTERVAL
         elif 'MB' in speed:
@@ -65,7 +72,23 @@ def process_iperf_data():
             print("Error parsing iperf data")
             time.sleep(5)
             sys.exit(2)
-    download = upload = speed  
+        upload = speed
+    print('waiting for iperf server to send download stats')
+    data = s_q.get()
+    r_q.put('Release iperf server thread')
+    print('received iperf server download data')
+    if data:
+        speed = data[-1]
+        if 'GB' in speed:
+            speed = float(speed.split()[0]) * 1024 / IPERF_SERVER_INTERVAL
+        elif 'MB' in speed:
+            speed = float(speed.split()[0]) / IPERF_SERVER_INTERVAL
+        else:
+            print("Error parsing iperf client data. Unrecoverable")
+            time.sleep(5)
+            sys.exit(2)
+        download = speed
+
     print(f"Download speed is {download}")
     
     return upload, download, latency
@@ -82,7 +105,7 @@ def fork(command, args=None):
 def start_speedtest():
     
     while True:
-        s_file = str(time.time() * 100)
+       
         server_ping = SPEEDTEST_HOST_PING
         server_iperf = SPEEDTEST_HOST_IPERF
         iperf_cmd = ["iperf -c {} -i 1 -p 5012 -b 800m -l1200  -t {} -u -y > {}".format(
@@ -114,10 +137,49 @@ def start_speedtest():
             print("Failed to run command correctly")
             print(iperf_stderr)
             print(ping_stderr)
+        
 
-        #time.sleep(SPEEDTEST_INTERVAL)
+def iperf_server():
+    print('Starting iperf server thread')
+    server_log = 'iperf-server.txt'
+    patt = r'\d+[.0-9]\d+ [MG]Bytes'
+    while True:
+        server = pexpect.spawn('/bin/bash', timeout=120)
+        server.sendline(f'iperf -s -p 9088 -u > {server_log}')
+        try:
+            server.expect(patt)
+            print("iPerf server data received by worker thread")
+        except Exception as e:
+            print(e)
+            server.kill()
+            time.sleep(5)
+            continue
+        print("iPerf Server received data")
+        server.kill()
+
+        try:
+            with open(server_log) as f:
+                data = f.read()
+                vals = re.findall(patt, data)
+                if vals:
+                    s_q.put(vals)
+                    r_q.get()
+                else:
+                    print(f"unable to read any data from {server_log}")
+                    time.sleep(5)
+                    continue
+        except Exception as e:
+            print(e)
+            print(f"unable to read any data from {server_log}")
+            time.sleep(5)
+            continue
+
+
 
 if __name__ == '__main__':
+    iperf_server = threading.Thread(target=iperf_server)
+    iperf_server.start()
+    print('Starting main thread')
     start_speedtest()
     printf("Speedtest stopped...")
 
