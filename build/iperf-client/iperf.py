@@ -145,17 +145,20 @@ def iperf_server():
     patt = r'\d+[.0-9]\d+ [MG]Bytes'
     while True:
         server = pexpect.spawn('/bin/bash', timeout=120)
-        server.sendline(f'iperf -s -p 9088 -u > {server_log}')
+        server.sendline(f'iperf -s -p 9088 -u | tee {server_log}')
         try:
-            server.expect(patt)
+            server.expect(r'[MG]Bytes')
             print("iPerf server data received by worker thread")
         except Exception as e:
             print(e)
-            server.kill()
+            server.kill(9)
+            server.terminate()
+            print("Failed to connect to any iperf Client retrying in 5s")
             time.sleep(5)
             continue
         print("iPerf Server received data")
-        server.kill()
+        server.kill(9)
+        server.terminate()
 
         try:
             with open(server_log) as f:

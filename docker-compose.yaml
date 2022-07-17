@@ -32,14 +32,16 @@ services:
     build: ./build/iperf-client
     container_name: iperf-client
     command: python iperf.py
+    tty: true
     environment:
       - "IPERF_INTERVAL:${IPERF_INTERVAL}"
       - "SPEEDTEST_HOST_PING:${SPEEDTEST_HOST_PING}"
       - "SPEEDTEST_HOST_IPERF:${SPEEDTEST_HOST_IPERF}"
-      - "INFLUXDB_DB=speedtest"
+      - "INFLUXDB_DB=${INFLUXDB_DB}"
       - "INFLUXDB_DB_PORT:${INFLUXDB_DB_PORT}"
       - "INFLUXDB_USERNAME=root"
       - "INFLUXDB_PASSWORD:${INFLUXDB_PASSWORD}"
+      - "INFLUXDB_HOST:${INFLUXDB_HOST}"
     depends_on:
       - influxdb
 
