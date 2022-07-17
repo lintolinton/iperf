@@ -8,16 +8,16 @@ import subprocess
 import threading
 from influxdb import InfluxDBClient
 
-SPEEDTEST_HOST = 'google.com' if not os.environ.get('SPEEDTEST_HOST') else os.environ.get('SPEEDTEST_HOST')
-SPEEDTEST_SERVER = 'google.com' if not os.environ.get('SPEEDTEST_SERVER') else os.environ.get('SPEEDTEST_SERVER')
+SPEEDTEST_HOST = '10.8.17.42' if not os.environ.get('SPEEDTEST_HOST') else os.environ.get('SPEEDTEST_HOST')
+SPEEDTEST_SERVER = '10.8.17.42' if not os.environ.get('SPEEDTEST_SERVER') else os.environ.get('SPEEDTEST_SERVER')
 INFLUXDB_DB = 'speedtest' if not os.environ.get('INFLUXDB_DB') else os.environ.get('INFLUXDB_DB')
 INFLUXDB_HOST = 'influxdb' if not os.environ.get('INFLUXDB_HOST') else os.environ.get('INFLUXDB_HOST')
 INFLUXDB_DB_PORT = 8086 if not os.environ.get('INFLUXDB_DB_PORT') else os.environ.get('INFLUXDB_DB_PORT')
 INFLUXDB_USERNAME = 'root' if not os.environ.get('INFLUXDB_USERNAME') else os.environ.get('INFLUXDB_USERNAME')
 INFLUXDB_PASSWORD = 'root' if not os.environ.get('INFLUXDB_PASSWORD') else os.environ.get('INFLUXDB_PASSWORD')
 SPEEDTEST_INTERVAL = 10 if not os.environ.get('SPEEDTEST_INTERVAL') else os.environ.get('SPEEDTEST_INTERVAL')
-SPEEDTEST_HOST_PING = 'google.com' if not os.environ.get('SPEEDTEST_HOST_PING') else os.environ.get('SPEEDTEST_HOST_PING')
-SPEEDTEST_HOST_IPERF = 'google.com' if not os.environ.get('SPEEDTEST_HOST_IPERF') else os.environ.get('SPEEDTEST_HOST_IPERF')
+SPEEDTEST_HOST_PING = '10.8.140.50' if not os.environ.get('SPEEDTEST_HOST_PING') else os.environ.get('SPEEDTEST_HOST_PING')
+SPEEDTEST_HOST_IPERF = '10.8.17.42' if not os.environ.get('SPEEDTEST_HOST_IPERF') else os.environ.get('SPEEDTEST_HOST_IPERF')
 iperf_stdout_output = 'iperf_stdout.txt'
 ping_stdout_output = 'ping_stdout.txt'
 IPERF_INTERVAL = 10 if not os.environ.get('IPERF_INTERVAL') else os.environ.get('IPERF_INTERVAL')
@@ -134,9 +134,11 @@ def start_speedtest():
                 print(f'Failed to update Influx DB {e}')
                 time.sleep(5)
         else:
-            print("Failed to run command correctly")
+            print("Failed to run ping/iperf command. Check if iperf server is online")
             print(iperf_stderr)
             print(ping_stderr)
+
+        time.sleep(120)
         
 
 def iperf_server():

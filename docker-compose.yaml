@@ -32,6 +32,8 @@ services:
     build: ./build/iperf-client
     container_name: iperf-client
     command: python iperf.py
+    ports:
+      - "9088:9088"
     tty: true
     environment:
       - "IPERF_INTERVAL:${IPERF_INTERVAL}"
