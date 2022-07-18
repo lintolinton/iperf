@@ -5,7 +5,7 @@ services:
     restart: always
     image: influxdb:1.8
     ports:
-      - "${INFLUXDB_DB_PORT}:8086"
+      - "${INFLUXDB_DB_PORT}:${INFLUXDB_DB_PORT}"
     volumes:
       - "./data/influxdb/:/var/lib/influxdb"
     environment:
